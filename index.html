@@ -237,6 +237,94 @@
   .clear-done:hover { color: var(--danger); }
   .sep { height: 1px; background: var(--border); margin: 1rem 0; }
 
+  /* ── Checklist ── */
+  .checklist-area { margin-top: 0.25rem; }
+
+  .checklist-controls {
+    display: flex; gap: 8px; margin-top: 1rem; align-items: center; flex-wrap: wrap;
+  }
+
+  .cl-btn {
+    height: 34px; padding: 0 13px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border-hover);
+    background: transparent; color: var(--text-secondary);
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    white-space: nowrap; transition: background 0.12s, color 0.12s;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .cl-btn:hover { border-color: var(--border-hover); background: var(--bg); }
+
+  .career   .cl-btn.primary { background: var(--accent-career);   color: #fff; border-color: transparent; }
+  .daily    .cl-btn.primary { background: var(--accent-daily);    color: #fff; border-color: transparent; }
+  .learning .cl-btn.primary { background: var(--accent-learning); color: #fff; border-color: transparent; }
+  .health   .cl-btn.primary { background: var(--accent-health);   color: #fff; border-color: transparent; }
+  .cl-btn.primary:hover { opacity: 0.85; }
+
+  .cl-count-input {
+    width: 48px; height: 34px; text-align: center;
+    border: 0.5px solid var(--border-hover);
+    border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text);
+    font-size: 13px; outline: none;
+  }
+
+  .checklist-box {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-top: 1rem;
+  }
+
+  .checklist-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  }
+
+  .checklist-title-input {
+    flex: 1; font-size: 14px; font-weight: 500;
+    color: var(--text); background: transparent;
+    border: none; outline: none;
+    border-bottom: 1px solid var(--border-hover);
+    padding: 2px 0; font-family: inherit;
+  }
+
+  .checklist-progress {
+    font-size: 11px; color: var(--text-hint); white-space: nowrap;
+  }
+
+  .cl-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 0;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .cl-item:last-child { border-bottom: none; }
+
+  .cl-item input[type="checkbox"] {
+    width: 16px; height: 16px; flex-shrink: 0;
+    cursor: pointer; accent-color: var(--success);
+    flex: none;
+  }
+
+  .cl-item-text {
+    flex: 1; font-size: 14px; color: var(--text);
+    background: transparent; border: none; outline: none;
+    border-bottom: 1px solid transparent;
+    padding: 0; font-family: inherit;
+    transition: border-color 0.15s;
+  }
+  .cl-item-text:focus { border-bottom-color: var(--border-hover); }
+  .cl-item-text.checked { text-decoration: line-through; color: var(--text-hint); }
+
+  .cl-delete-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-hint); font-size: 13px;
+    width: 22px; height: 22px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: background 0.15s, color 0.15s;
+  }
+  .cl-delete-btn:hover { background: #FCEBEB; color: #A32D2D; }
+
   /* ── Websites panel ── */
   .websites-panel {
     max-width: 1020px;
@@ -618,6 +706,17 @@ function buildSection(id, label) {
       <input type="text" id="${id}-pre-input" placeholder="Add a standing task..." />
       <button class="add-btn" id="${id}-pre-add-btn" onclick="addPrefilled('${id}')">Add</button>
     </div>
+
+    <div class="sep"></div>
+
+    <div class="checklist-area" id="${id}-cl-area">
+      <div class="checklist-controls">
+        <button class="cl-btn primary" onclick="createChecklist('${id}')">＋ Create checklist</button>
+        <input type="number" class="cl-count-input" id="${id}-cl-count" min="1" max="20" value="5" title="Number of items" />
+        <span style="font-size:12px;color:var(--text-hint)">items</span>
+      </div>
+      <div id="${id}-cl-box"></div>
+    </div>
   `;
 
   document.getElementById('main-grid').appendChild(col);
@@ -636,7 +735,126 @@ SECTIONS.forEach(s => {
   loadSection(s.id);
   buildSection(s.id, s.label);
   renderSection(s.id);
+  renderChecklist(s.id);
 });
+
+/* ── Checklists ── */
+function loadChecklist(id) {
+  return JSON.parse(localStorage.getItem('forefront4_cl_' + id) || 'null');
+}
+
+function saveChecklist(id, cl) {
+  if (cl === null) {
+    localStorage.removeItem('forefront4_cl_' + id);
+  } else {
+    localStorage.setItem('forefront4_cl_' + id, JSON.stringify(cl));
+  }
+}
+
+function createChecklist(id) {
+  const existing = loadChecklist(id);
+  if (existing) {
+    if (!confirm('Replace the existing checklist for this section?')) return;
+  }
+  const count = Math.max(1, Math.min(20, parseInt(document.getElementById(id + '-cl-count').value) || 5));
+  const cl = {
+    title: '',
+    items: Array.from({ length: count }, (_, i) => ({ id: Date.now() + i, text: '', checked: false }))
+  };
+  saveChecklist(id, cl);
+  renderChecklist(id);
+}
+
+function deleteChecklist(id) {
+  if (!confirm('Delete this checklist?')) return;
+  saveChecklist(id, null);
+  renderChecklist(id);
+}
+
+function updateChecklistTitle(id, val) {
+  const cl = loadChecklist(id);
+  if (!cl) return;
+  cl.title = val;
+  saveChecklist(id, cl);
+}
+
+function toggleChecklistItem(id, itemId) {
+  const cl = loadChecklist(id);
+  if (!cl) return;
+  const item = cl.items.find(i => i.id === itemId);
+  if (item) item.checked = !item.checked;
+  saveChecklist(id, cl);
+  renderChecklist(id);
+}
+
+function updateChecklistItemText(id, itemId, val) {
+  const cl = loadChecklist(id);
+  if (!cl) return;
+  const item = cl.items.find(i => i.id === itemId);
+  if (item) item.text = val;
+  saveChecklist(id, cl);
+}
+
+function renderChecklist(id) {
+  const box = document.getElementById(id + '-cl-box');
+  const cl = loadChecklist(id);
+  box.innerHTML = '';
+  if (!cl) return;
+
+  const done  = cl.items.filter(i => i.checked).length;
+  const total = cl.items.length;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'checklist-box';
+
+  const header = document.createElement('div');
+  header.className = 'checklist-header';
+
+  const titleInp = document.createElement('input');
+  titleInp.type = 'text';
+  titleInp.className = 'checklist-title-input';
+  titleInp.placeholder = 'Checklist name...';
+  titleInp.value = cl.title || '';
+  titleInp.oninput = () => updateChecklistTitle(id, titleInp.value);
+
+  const progress = document.createElement('span');
+  progress.className = 'checklist-progress';
+  progress.textContent = `${done}/${total}`;
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'del-btn';
+  delBtn.innerHTML = '&#10005;';
+  delBtn.title = 'Delete checklist';
+  delBtn.onclick = () => deleteChecklist(id);
+
+  header.appendChild(titleInp);
+  header.appendChild(progress);
+  header.appendChild(delBtn);
+  wrapper.appendChild(header);
+
+  cl.items.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'cl-item';
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = item.checked;
+    cb.onchange = () => toggleChecklistItem(id, item.id);
+
+    const txt = document.createElement('input');
+    txt.type = 'text';
+    txt.className = 'cl-item-text' + (item.checked ? ' checked' : '');
+    txt.placeholder = 'Item...';
+    txt.value = item.text || '';
+    txt.oninput = () => updateChecklistItemText(id, item.id, txt.value);
+
+    row.appendChild(cb);
+    row.appendChild(txt);
+    wrapper.appendChild(row);
+  });
+
+  box.appendChild(wrapper);
+}
 
 /* ── Websites ── */
 function loadWebsites() {
