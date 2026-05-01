@@ -436,6 +436,52 @@
   #install-banner .dismiss {
     background: transparent; color: var(--text-hint); padding: 5px 6px;
   }
+
+  /* ── Daily summary ── */
+  .summary-panel {
+    max-width: 1020px;
+    margin: 1.5rem auto 0;
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .summary-panel-left { min-width: 0; }
+  .summary-panel-left h3 { font-size: 14px; font-weight: 500; margin-bottom: 3px; }
+  .summary-panel-left p  { font-size: 13px; color: var(--text-secondary); }
+
+  .summary-email-row { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+  .summary-email-row input[type="email"] {
+    height: 38px; flex: 1; min-width: 180px;
+    border: 0.5px solid var(--border-hover);
+    border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text);
+    font-size: 14px; padding: 0 11px; outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .summary-email-row input[type="email"]:focus {
+    border-color: var(--accent-career);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-career) 14%, transparent);
+  }
+  .summary-email-row input[type="email"]::placeholder { color: var(--text-hint); }
+
+  .summary-send-btn {
+    height: 38px; padding: 0 18px;
+    border-radius: var(--radius-sm);
+    border: none; color: #fff;
+    background: var(--accent-career);
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; white-space: nowrap;
+    transition: opacity 0.15s;
+  }
+  .summary-send-btn:hover { opacity: 0.85; }
+  .summary-send-btn:active { opacity: 0.7; transform: scale(0.98); }
 </style>
 </head>
 <body>
@@ -459,6 +505,17 @@
     <button class="web-add-btn" onclick="addWebsite()">Add</button>
   </div>
   <div class="web-categories" id="web-cats"></div>
+</div>
+
+<div class="summary-panel">
+  <div class="summary-panel-left">
+    <h3>📋 Daily summary</h3>
+    <p>Opens a pre-filled email with everything you completed today across all sections.</p>
+    <div class="summary-email-row">
+      <input type="email" id="summary-email" placeholder="Your email address..." />
+      <button class="summary-send-btn" onclick="sendSummary()">Send today's summary</button>
+    </div>
+  </div>
 </div>
 
 <div id="install-banner">
@@ -936,6 +993,72 @@ document.getElementById('web-label').addEventListener('keydown', e => { if (e.ke
 document.getElementById('web-url').addEventListener('keydown', e => { if (e.key === 'Enter') addWebsite(); });
 
 renderWebsites();
+
+/* ── Daily summary ── */
+function sendSummary() {
+  const emailInput = document.getElementById('summary-email');
+  const to = emailInput.value.trim();
+  if (!to) { emailInput.focus(); return; }
+
+  // Persist email address
+  localStorage.setItem('forefront4_summary_email', to);
+
+  const dateStr = new Date().toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const subject = encodeURIComponent(`Forefront — Daily Summary, ${dateStr}`);
+
+  let body = `FOREFRONT — DAILY SUMMARY\n${dateStr}\n`;
+  body += '='.repeat(40) + '\n\n';
+
+  let grandTotal = 0;
+  let grandDone  = 0;
+
+  SECTIONS.forEach(s => {
+    const { prefilled, daily } = state[s.id];
+    const allTasks = [...prefilled, ...daily];
+    const done     = allTasks.filter(t => t.done);
+    const active   = allTasks.filter(t => !t.done);
+    grandTotal += allTasks.length;
+    grandDone  += done.length;
+
+    body += `── ${s.label.toUpperCase()} ──\n`;
+
+    if (done.length > 0) {
+      body += `Completed (${done.length}):\n`;
+      done.forEach(t => { body += `  ✓ ${t.text} [${t.priority}]\n`; });
+    } else {
+      body += `Completed: none\n`;
+    }
+
+    if (active.length > 0) {
+      body += `Still open (${active.length}):\n`;
+      active.forEach(t => { body += `  ○ ${t.text} [${t.priority}]\n`; });
+    }
+
+    // Checklist
+    const cl = loadChecklist(s.id);
+    if (cl) {
+      const clDone   = cl.items.filter(i => i.checked && i.text);
+      const clActive = cl.items.filter(i => !i.checked && i.text);
+      const clTitle  = cl.title || 'Checklist';
+      body += `Checklist — ${clTitle} (${clDone.length}/${cl.items.filter(i=>i.text).length} done):\n`;
+      clDone.forEach(i   => { body += `  ✓ ${i.text}\n`; });
+      clActive.forEach(i => { body += `  ○ ${i.text}\n`; });
+    }
+
+    body += '\n';
+  });
+
+  body += '='.repeat(40) + '\n';
+  body += `Overall: ${grandDone} of ${grandTotal} tasks completed today.\n`;
+  body += '\nSent from Forefront.';
+
+  const mailto = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${encodeURIComponent(body)}`;
+  window.location.href = mailto;
+}
+
+// Restore saved email
+const savedEmail = localStorage.getItem('forefront4_summary_email');
+if (savedEmail) document.getElementById('summary-email').value = savedEmail;
 
 /* ── PWA ── */
 if ('serviceWorker' in navigator) {
